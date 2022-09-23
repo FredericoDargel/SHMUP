@@ -136,10 +136,15 @@ class GameState extends AbstractGameState {
         // Player Object:
         this.gameObjects = [];
         this.player = new Player(inputHandler);
+        this.enemyA = new Enemy([160, 80], 1, [-1, .3]);
+        this.enemyB = new Enemy([130, 80], 1, [1, .3]);
         this.gameObjects.push(this.player);
+        this.gameObjects.push(this.enemyA);
+        this.gameObjects.push(this.enemyB);
     }
 
     update() {
+        this.detectCollisions();
         this.gameObjects.forEach(gameObject => {
             gameObject.update(this, this.gameBoundaries);
         });
@@ -169,6 +174,33 @@ class GameState extends AbstractGameState {
     scaleGameScreen(scale) {
         this.gameScreen = [this.gameScreen[0] * scale, 
                             this.gameScreen[1] * scale];
+    }
+
+    detectCollisions(){
+        for (let i = 0; i < this.gameObjects.length; i++) {
+            var projectile = this.gameObjects[i];
+            
+            for (let j = 0; j < this.gameObjects.length; j++) {
+                var actor = this.gameObjects[j];
+                if (!(projectile instanceof Projectile)) { continue; }
+                if (!(actor instanceof AbstractActor)) { continue; }
+
+                if (projectile.position[0] > actor.position[0] &&
+                    projectile.position[0] < actor.position[0]+actor.width &&
+                    projectile.position[1] > actor.position[1] &&
+                    projectile.position[1] < actor.position[1]+actor.height){
+
+
+                    for (let k = 0; k < this.gameObjects.length; k++) {
+                        var gameObject = this.gameObjects[k];
+                        if (gameObject === actor) {
+                            this.gameObjects.splice(k, 1);
+                        }
+                    }
+                    
+                }
+            }
+        }
     }
 
 };
@@ -351,7 +383,9 @@ class Player extends AbstractActor {
 
     bomb(gameState) {
         // console.log("Boom!");
+
         if (gameState.playerBombs <= 0) {return}
+        this.input.state['cancel'] = false;
 
         gameState.playerBombs--;
         console.log(gameState.playerBombs);
@@ -359,10 +393,42 @@ class Player extends AbstractActor {
             var element = gameState.gameObjects[i];
             if (!(element instanceof Player)) {
                 gameState.gameObjects.pop(element);
+                i--;
             }
         }
     }
 };
+
+class Enemy extends AbstractActor {
+    constructor(startingPosition, speed, direction) {
+        super(25, 25, startingPosition, speed)
+        this.movement = direction;
+        this.hitpoints = 1;
+
+    }
+
+    update(gameState, boundaries) {
+        this.move(boundaries);
+        if (this.position[0] <= boundaries[0]+this.width || this.position[0] >= boundaries[2]-this.width) {
+            this.movement[0] *= -1;
+        }
+        if (this.position[1] <= boundaries[1]+this.height || this.position[1] >= boundaries[3]-this.height ) {
+            for (let i = 0; i < gameState.gameObjects.length; i++) {
+                var gameObject = gameState.gameObjects[i];
+                if (gameObject === this) {
+                    gameState.gameObjects.splice(i, 1);
+                }
+                
+            }
+        }
+    }
+
+    draw(gameWindow) {
+        gameWindow.context.fillStyle = 'purple';
+        gameWindow.context.fillRect(this.position[0], this.position[1],
+                        this.width * gameWindow.scale, this.height * gameWindow.scale);
+    }
+}
 
 class Projectile extends AbstractActor {
     constructor(startingPosition, speed, direction) {
