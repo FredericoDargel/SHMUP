@@ -1,18 +1,25 @@
 class GameWindow {
-    constructor(width, height) {
-        this.resolution = [width, height];
-        this.scale = 1;
-        this.canvas = document.querySelector('canvas');
-        this.context = this.canvas.getContext('2d');
+
+    constructor(scale) {
+        // do not assign anything from here directly!
+        this.resolution = [640, 480];
+        this.scale      = scale;
+        this.canvas     = document.querySelector('canvas');
+        this.context    = this.canvas.getContext('2d');
+
         this.scaleResolution();
     }
 
     scaleResolution() {
-        [this.canvas.width, this.canvas.height] = [this.resolution[0] * this.scale, this.resolution[1] * this.scale];
+        this.resolution = [this.resolution[0] * this.scale, 
+                            this.resolution[1] * this.scale];
+                            
+        [this.canvas.width, this.canvas.height] = [this.resolution[0], this.resolution[1]];
     }
 
     setScale(scale) {
         if (scale <= 0 || this.scale == scale) { return }
+
         this.scale = scale;
         this.scaleResolution();
     }
@@ -22,6 +29,8 @@ class InputHandler {
 
     constructor() {
         // do not assign anything from here directly!
+
+        // Game Controls:
         this.state = {
             up:         false,     
             down:       false,   
@@ -34,6 +43,7 @@ class InputHandler {
             menu:       false,   
         };
 
+        // Input:
         this.keyMap = {
             ArrowUp:    'up',    
             ArrowDown:  'down',
@@ -53,160 +63,368 @@ class InputHandler {
             // console.log("KEYDOWN: " + key);
         });
 
-        // Dunno how to do or to use this properly...
-
-        // addEventListener('keypress', (ev) => {
-        //     let key = this.keyMap[ev.code];
-        //     if (!key) { return } // ignore other keys
-        //     this.state[key] = true;
-        //     console.log("KEYPRESSED: " + ev);
-        // })
-
         addEventListener ("keyup", (ev) => {
             let key = this.keyMap[ev.code];
             if (!key) { return } // ignore other keys
             this.state[key] = false;
             // console.log("KEYUP: " + key);
         });
+
+        /* Dunno how to do or to use this properly...
+         * addEventListener('keypress', (ev) => {
+         *     let key = this.keyMap[ev.code];
+         *     if (!key) { return } // ignore other keys
+         *     this.state[key] = true;
+         *     console.log("KEYPRESSED: " + ev);
+         * })
+         */
     } 
 };
 
 class Game {
 
     constructor() {
-        this.gameWindow = new GameWindow(600, 400);
-        this.inputHandler = new InputHandler();
 
-        this.gameStates = [];
-        this.gameStates.push(new GameState(this.gameWindow, this.inputHandler))
+        this.gameWindow     = new GameWindow(1);
+        this.inputHandler   = new InputHandler();
+        
+        this.gameStates     = [];
+
+        this.initGameStates();
 
         // TODO: A proper game loop like a grown-up.
         this.gameloop = setInterval(() => {
-            this.gameStates[this.gameStates.length - 1].update();
-            this.gameStates[this.gameStates.length - 1].draw();
+
+            if(this.gameStates.length == 0) { delete this; }
+
+            this.gameStates[this.gameStates.length - 1].update(this.inputHandler, this.gameWindow);
+            this.gameStates[this.gameStates.length - 1].draw(this.gameWindow);
+
         }, 1000 / 60 );
+    }
+
+    initGameStates() {
+        var gameState = new GameState(this.gameWindow.scale);
+
+        this.gameStates.push(gameState);
     }
 };
 
-// TODO: Common attributes.
-// TODO: Methods to enter, exit, etc...
 class AbstractGameState {
-    constructor() {
-        if (this.constructor == AbstractGameState){
+    constructor(scale) {
+        if (this.constructor == AbstractGameState) {
             throw new Error("Abstract classes can NOT be instatiated.");
         }
+
+        this.scale = scale;
     }
 
-    update(){
+    update() {
         throw new Error("Method 'update()' must be implemented.");
     }
 
     draw() {
         throw new Error("Method 'draw()' must be implemented.");
     }
-};
+}
 
 class GameState extends AbstractGameState {
+    constructor(scale) {
+        super(scale);
 
-    constructor(gameWindow, inputHandler,
-        // highScore, lives, bombs 
-        ) {
-        super();
-
-        this.gameWindow = gameWindow;
-
-        this.gameScreen = [240, 320]; // Maybe this is important, maybe not, I'm not sure.
+        // Native resolution values:
+        this.gameScreen = [340, 400];
         this.padding = 40;
-        this.gameBoundaries = [this.padding, this.padding/1.5, 
-                                this.gameScreen[0]+this.padding, this.gameScreen[1]+this.padding/1.5];
 
-        
-        // TODO: Decide wheater or not these should be in another class.
-        // UI and game elements:
-        this.highScore = 0;
-        this.actualScore = 0;
+        // Game UI:
+        this.gameUI = new GameUI(this);
 
-        this.playerLives = 0;
-        this.playerBombs = 3;
-
-        this.playerPower = 0;
-        this.graze = 0;
-        this.score = 0;
-
-        // Player Object:
+        // GameObjects:
         this.gameObjects = [];
-        this.player = new Player(inputHandler);
-        this.enemyA = new Enemy([160, 80], 1, [-1, .3]);
-        this.enemyB = new Enemy([130, 80], 1, [1, .3]);
+
+        // "Native" player width and height:
+        var playerWidth = 25;   // Read Player Class comments!
+        var playerHeight = 25;  // As above!
+
+        // Testing bullshit:
+        var calculatedArea = this.calculateGameArea();
+        var startingPosition = [
+            calculatedArea[2] / 2 + (playerWidth * this.scale),
+            calculatedArea[3] - (playerHeight * this.scale)      
+        ]
+        this.player = new Player(playerWidth, playerHeight, startingPosition, 4 * scale, [0, 0]);
+        this.enemy = new Enemy(playerWidth, playerHeight,  [startingPosition[0], calculatedArea[1] + playerHeight * this.scale], 1 * scale, [1, .25]);
+        
         this.gameObjects.push(this.player);
-        this.gameObjects.push(this.enemyA);
-        this.gameObjects.push(this.enemyB);
+        this.gameObjects.push(this.enemy);
+    }
+
+    update(inputHandler, gameWindow) {
+        if (this.gameObjects.length == 0) { return; }
+        this.controlPlayer(inputHandler);
+        this.gameObjects.forEach(gameObject => {
+            gameObject.update(this, this.calculateGameArea());
+        });
+    }
+
+    calculateGameArea() {
+        var padding = this.padding * this.scale;
+
+        var gameArea = [
+            padding,                                        // Start X
+            padding / 1.5,                                  // Start Y
+            (this.gameScreen[0] * this.scale) + padding,         // End X
+            (this.gameScreen[1] * this.scale) + (padding / 1.5)  // End Y
+        ];
+
+        return gameArea;
+    }
+
+    controlPlayer(input) {
+
+        if (input.state['slow']) {
+            this.player.isSlowed = true;
+        } else {
+            this.player.isSlowed = false;
+        }
+
+        if (input.state['confirm']) {
+            this.player.shoot(this);
+        }
+
+        // if (input.state['cancel'])
+        // {
+        //     this.bomb(gameState);
+        // }
+
+        this.player.direction = this.moveInput(input);
+    }
+
+    moveInput(input) {
+        var direction = [0, 0];
+
+        // Horizontal movement:
+        if (input.state['right']) { direction[0] = 1 }
+        else if (input.state['left']) { direction[0] = -1}
+        else { direction[0] = 0 }
+
+        // Vertical movement:
+        if (input.state['down']) { direction[1] = 1 }
+        else if (input.state['up']) { direction[1] = -1 }
+        else { direction[1] = 0;}
+
+        // Normalize:
+        if ( direction[0] != 0 && direction[1] != 0) {
+            var normal = Math.sqrt( direction[0]**2 + direction[1]**2 );
+            direction[0] = direction[0] / normal;
+            direction[1] = direction[1] / normal;
+        }
+
+        // Apply slowed speed after normalization:
+        // if (this.player.isSlowed) {
+        //     direction[0] *= this.player.slowed;
+        //     direction[1] *= this.player.slowed;
+        // }
+
+        return direction;
+    }
+
+    draw(gameWindow) {
+        
+        var context = gameWindow.context;
+        var scale = gameWindow.scale;
+
+        this.drawBackground(gameWindow);
+        this.gameUI.draw(gameWindow, gameWindow.scale);
+
+        this.drawGameArea(context, scale);
+        this.gameObjects.forEach(gameObject => {
+            gameObject.draw(gameWindow);
+        });
+    }
+
+    drawBackground(gameWindow) {
+        gameWindow.context.fillStyle = 'darkblue';
+        gameWindow.context.fillRect(0, 0, gameWindow.resolution[0], gameWindow.resolution[1]);
+    }
+
+    drawGameArea(context, scale){
+        var gameArea = this.calculateGameArea(scale)
+
+        context.fillStyle = 'lightgrey';
+        context.fillRect(
+            gameArea[0], 
+            gameArea[1], 
+            gameArea[2], 
+            gameArea[3]
+        );
+    }
+}
+
+class GameUI {
+
+    constructor(GameState /* difficulty */) {
+
+        this.gameState = GameState;
+
+        // Font:
+        this.fontSize = 20;
+        this.fontStyle = "Courier";
+        this.fontColour = "lightgrey";
+        this.fontStroke = "lightgrey";
+
+        // Game:
+        this.highScore = 0; // TODO: get from a file..?
+        this.playerScore = 0; // Starts at 0;
+
+        this.playerLives = 3; // Depends on difficulty;
+        this.playerBombs = 3; // As above;
+
+        this.playerPower = 0; 
+        this.playerMaxPower = 0; // Dunno.
+        this.grazeCounter = 0;
+        this.collectedScore = 0;
+    }
+
+    setValuesFromDifficulty( /* difficulty */) {
+        /* TODO:
+        * Set lives and bombs according to difficulty
+        */
     }
 
     update() {
-        this.detectCollisions();
-        this.gameObjects.forEach(gameObject => {
-            gameObject.update(this, this.gameBoundaries);
-        });
+        if (this.playerLives == 0) {/* exit this state */}
+
     }
 
-    draw() {
-        // Background
-        var res = this.gameWindow.resolution;
-        this.gameWindow.context.fillStyle = 'darkblue';
-        this.gameWindow.context.fillRect(0, 0, res[0], res[1]);
+    draw(gameWindow, scale) {
         
-        // Game Area
-        this.gameWindow.context.fillStyle = 'lightgrey';
-        this.gameWindow.context.fillRect(this.padding, this.padding/1.5, 
-                                            this.gameBoundaries[2], this.gameBoundaries[3]);
+        var context = gameWindow.context;
         
-        // GameObjects:
-        this.gameObjects.forEach(gameObject => {
-            gameObject.draw(this.gameWindow);
+        var positionXOffset = 1.45;        
+        var menuItems = [];
+        
+        var highScore = {
+            text: "HighScore: " + this.highScore,
+            position: [gameWindow.resolution[0] / positionXOffset, 
+                        (this.gameState.padding) * scale],
+        };
+        menuItems.push(highScore);
+
+        var playerScore = {
+            text: "Score: " + this.playerScore,
+            position: [gameWindow.resolution[0] / positionXOffset, 
+                         (this.fontSize * 3) * scale],
+        };
+        menuItems.push(playerScore);
+
+        var lives = "";
+        for (let index = 0; index < this.playerLives; index++) {lives += "*";}
+
+        var playerLives = {
+            text: "Lives: " + lives,
+            position: [gameWindow.resolution[0] / positionXOffset,
+                        (this.fontSize * 5.5) * scale],
+        };
+        menuItems.push(playerLives);
+
+        var bombs = "";
+        for (let index = 0; index < this.playerLives; index++) {bombs += "*";}
+        var playerBombs = {
+            text: "Bombs: " + bombs,
+            position: [gameWindow.resolution[0] / positionXOffset,
+                        (this.fontSize * 6.5) * scale],
+        };
+        menuItems.push(playerBombs);
+
+        var playerPower = {
+            text: "Power: " + this.playerPower,
+            position: [gameWindow.resolution[0] / positionXOffset,
+                        (this.fontSize * 9) * scale],
+        };
+        menuItems.push(playerPower);
+
+        var grazeCounter = {
+            text: "Graze: " + this.grazeCounter,
+            position: [gameWindow.resolution[0] / positionXOffset,
+                        (this.fontSize * 10.0 ) * scale],
+        }; 
+        menuItems.push(grazeCounter);
+
+        var collectedScore = {
+            text: "Score: " + this.collectedScore,
+            position: [gameWindow.resolution[0] / positionXOffset, 
+                        (this.fontSize * 11) * scale],
+        }; 
+        menuItems.push(collectedScore);
+        
+        menuItems.forEach(item => {
+            this.drawText(item, context, scale);
         });
+
+        context.beginPath();
+        context.arc(
+            gameWindow.resolution[0] * 0.83,
+            gameWindow.resolution[1] * 0.8,
+            70 * gameWindow.scale,
+            0,
+            2* Math.PI
+        );
+        context.closePath();
+        context.fillStyle = "red";
+        context.fill();
+
+        context.beginPath();
+        context.arc(
+            gameWindow.resolution[0] * 0.83,
+            gameWindow.resolution[1] * 0.8,
+            66 * gameWindow.scale,
+            0,
+            2* Math.PI
+        );
+        context.closePath();
+        context.fillStyle = "lightgrey";
+        context.fill();
+
+        context.beginPath();
+        context.arc(
+            gameWindow.resolution[0] * 0.83,
+            gameWindow.resolution[1] * 0.8,
+            60 * gameWindow.scale,
+            0,
+            2* Math.PI
+        );
+        context.closePath();
+        context.fillStyle = "red";
+        context.fill();
+
+        context.beginPath();
+        context.arc(
+            gameWindow.resolution[0] * 0.83,
+            gameWindow.resolution[1] * 0.8,
+            54 * gameWindow.scale,
+            0,
+            2* Math.PI
+        );
+        context.closePath();
+        context.fillStyle = "darkblue";
+        context.fill();
     }
 
-    /* TODO: Not really. Is more 'IWantTo'.:
-     * I want that everytime anything calls GameWindow.setScale(scale) 
-     * this is ran as well.
-     */
-    scaleGameScreen(scale) {
-        this.gameScreen = [this.gameScreen[0] * scale, 
-                            this.gameScreen[1] * scale];
+    drawText(item, context, scale) {
+
+        context.font = this.fontSize * scale + 'px ' + this.fontStyle;
+        context.fillStyle = this.fontColour;
+        context.strokeStyle = this.fontStroke;
+        context.textAlign = "left";
+
+        context.fillText(item.text, item.position[0], item.position[1]);
+        context.strokeText(item.text, item.position[0], item.position[1]);
     }
-
-    detectCollisions(){
-        for (let i = 0; i < this.gameObjects.length; i++) {
-            var projectile = this.gameObjects[i];
-            
-            for (let j = 0; j < this.gameObjects.length; j++) {
-                var actor = this.gameObjects[j];
-                if (!(projectile instanceof Projectile)) { continue; }
-                if (!(actor instanceof AbstractActor)) { continue; }
-
-                if (projectile.position[0] > actor.position[0] &&
-                    projectile.position[0] < actor.position[0]+actor.width &&
-                    projectile.position[1] > actor.position[1] &&
-                    projectile.position[1] < actor.position[1]+actor.height){
-
-
-                    for (let k = 0; k < this.gameObjects.length; k++) {
-                        var gameObject = this.gameObjects[k];
-                        if (gameObject === actor) {
-                            this.gameObjects.splice(k, 1);
-                        }
-                    }
-                    
-                }
-            }
-        }
-    }
-
 };
 
 class AbstractActor {
-    constructor(width, height, startingPosition, speed) {
+    constructor(width, height, startingPosition, speed, direction) {
         if (this.constructor == AbstractActor){
             throw new Error("Abstract classes can NOT be instatiated.");
         }
@@ -217,15 +435,15 @@ class AbstractActor {
         this.position   = startingPosition;
         this.speed      = speed;
 
-        this.movement   = [0, 0];
+        this.direction   = direction;
     }
 
     // TODO: Boundaries are not working properly.
     move(boundaries) {
 
         // Keeping inbounds and actually moving:
-        var horizontalMovement  = this.position[0] + this.movement[0] * this.speed;
-        var verticalMovement    = this.position[1] + this.movement[1] * this.speed;
+        var horizontalMovement  = this.position[0] + this.direction[0] * this.speed;
+        var verticalMovement    = this.position[1] + this.direction[1] * this.speed;
 
         var startX  = boundaries[0];
         var endX    = boundaries[2];
@@ -242,7 +460,7 @@ class AbstractActor {
         // console.log(endX - startX);
         // console.log(endY - startY);
 
-        if (this.movement[0] != 0) {
+        if (this.direction[0] != 0) {
 
             if ( horizontalMovement >= startX && horizontalMovement <= endX ) {
                 this.position[0] = horizontalMovement;
@@ -257,7 +475,7 @@ class AbstractActor {
             }
         }
 
-        if (this.movement[1] != 0) {
+        if (this.direction[1] != 0) {
 
             if ( verticalMovement >= startY && verticalMovement <= endY ) {
                 this.position[1] = verticalMovement;
@@ -271,25 +489,23 @@ class AbstractActor {
                 this.position[1] = endY;
             }
         }
-
-        // Debug:
-        // if (this instanceof Player)
-        // {
-        //     if ( this.movement[0] != 0 || this.movement[1] != 0) {
-        //         console.log(this.position);
-        //     }
-        // }
     }
 };
 
 class Player extends AbstractActor {
-    constructor(input) {
-        super(25, 25, [160, 300], 3);
+    /* For some made up reason in my head I believe that actor's width and height 
+     * should not be passed scaled.
+     * The reason for that is that whenever these are real sprites you will want to define 
+     * in the constructor their sizes to be cropped from the sheet, animation and other stuff.
+     * So you want to pass the "Native" resolution for the Actor, player, enemy, whatever 
+     * and let the draw() method do the scaling.
+     */
+    constructor(width, height, startingPosition, speed, direction) {
+        super(width, height, startingPosition, speed, direction);
 
-        this.input = input;
-
-        this.slowed     = 0.5;
-        this.isSlowed   = false;
+        this.standardSpeed  = speed;
+        this.slowedSpeed    = speed * 0.5;
+        this.isSlowed       = false;
         
         this.lastShot         = performance.now();
         this.shootingCooldown = 50 ;
@@ -297,112 +513,72 @@ class Player extends AbstractActor {
 
     update(gameState, boundaries) {
 
-        if (this.input.state['slow']) {
-            this.isSlowed = true;
+        var movingBoundaries = Object.assign({}, boundaries);
+        // It works tho:
+        // movingBoundaries[2] += this.width / 1.67 * gameState.scale ;
+        // movingBoundaries[3] += this.height * .1 * gameState.scale;
+
+        if (this.isSlowed)
+        {
+            this.speed = this.slowedSpeed;
         } else {
-            this.isSlowed = false;
+            this.speed = this.standardSpeed;
         }
 
-        if (this.input.state['confirm'] 
-            && performance.now() - this.lastShot > this.shootingCooldown)
-        {
-            this.shoot(gameState);
-        }
+        this.move(movingBoundaries);
+    }
 
-        if (this.input.state['cancel'])
-        {
-            this.bomb(gameState);
-        }
-
-        this.moveInput(this.input);
-        this.move(boundaries);
+    shoot(gameState) { 
+        if (!(performance.now() - this.lastShot > this.shootingCooldown)) { return; }
+        
+        this.lastShot = performance.now();
+        var shootPosition =  [
+            this.position[0] + this.width * gameState.scale / 2,
+            this.position[1] - this.height * gameState.scale / 10
+        ];
+        
+        gameState.gameObjects.push(new Projectile(shootPosition, 10, [0, -1], undefined, 'yellow'))
     }
 
     draw(gameWindow) {
-        // gameWindow.context.fillStyle = 'green';
-        // gameWindow.context.fillRect(this.position[0], this.position[1],
-        //                 this.width * gameWindow.scale, this.height * gameWindow.scale);
+        // Less Verbose:
+        var context = gameWindow.context;
+        var scale = gameWindow.scale;
 
-        gameWindow.context.beginPath()
-        gameWindow.context.moveTo(this.position[0], this.position[1]+this.height)  
-        gameWindow.context.lineTo(this.position[0]+this.height/2, this.position[1]) 
-        gameWindow.context.lineTo(this.position[0]+this.height, this.position[1]+this.width)
-        gameWindow.context.lineTo(this.position[0], this.position[1]+this.height)
-        gameWindow.context.fillStyle = 'green';
-        gameWindow.context.fill();
-        gameWindow.context.closePath();
+        // Drawing Triangles is hard:
+        context.beginPath();
+        context.moveTo(this.position[0], this.position[1] + this.height * scale);
+        context.lineTo(this.position[0] + (this.height * scale) / 2, this.position[1]);
+        context.lineTo(this.position[0] + this.height * scale, this.position[1] + this.width * scale);
+        context.lineTo(this.position[0], this.position[1]+this.height * scale);
+        context.fillStyle = 'black';
+        context.fill();
+        context.closePath();
 
         
 
         // Shows hitbox
         if (this.isSlowed) {
-            gameWindow.context.beginPath();
-            gameWindow.context.arc(
-                this.position[0] + this.width * .5, 
-                this.position[1] + (this.height * .65), 
-                (this.width / 7) * gameWindow.scale, 
+            context.beginPath();
+            context.arc(
+                this.position[0] + this.width * scale * .5, 
+                this.position[1] + (this.height * scale * .65), 
+                (this.width / 7) * scale, 
                 0, 
-                2 * Math.PI);
-            gameWindow.context.closePath();
-            gameWindow.context.fillStyle = 'red';
-            gameWindow.context.fill();
+                2 * Math.PI
+            );
+            context.closePath();
+            context.fillStyle = 'red';
+            context.fill();
         }
     }
-
-    moveInput(input) {
-        // Horizontal movement:
-        if (input.state['right']) { this.movement[0] = 1 }
-        else if (input.state['left']) { this.movement[0] = -1}
-        else { this.movement[0] = 0 }
-
-        // Vertical movement:
-        if (input.state['down']) { this.movement[1] = 1 }
-        else if (input.state['up']) { this.movement[1] = -1 }
-        else { this.movement[1] = 0;}
-
-        // Normalize:
-        if ( this.movement[0] != 0 && this.movement[1] != 0) {
-            var normal = Math.sqrt( this.movement[0]**2 + this.movement[1]**2 );
-            this.movement[0] = this.movement[0] / normal;
-            this.movement[1] = this.movement[1] / normal;
-        }
-
-        // Apply slowed speed after normalization:
-        if (this.isSlowed) {
-            this.movement[0] *= this.slowed;
-            this.movement[1] *= this.slowed;
-        }
-    }
-
-    shoot(gameState) { 
-        // console.log("Pew!");
-        this.lastShot = performance.now();
-        var shootPosition =  [this.position[0] + this.width / 2, this.position[1]-this.height/2.75];
-        gameState.gameObjects.push(new Projectile(shootPosition, 10, [0, -1]))
-    }
-
-    bomb(gameState) {
-        // console.log("Boom!");
-
-        if (gameState.playerBombs <= 0) {return}
-        this.input.state['cancel'] = false;
-
-        gameState.playerBombs--;
-        console.log(gameState.playerBombs);
-        for (let i = 0; i < gameState.gameObjects.length; i++) {
-            var element = gameState.gameObjects[i];
-            if (!(element instanceof Player)) {
-                gameState.gameObjects.pop(element);
-                i--;
-            }
-        }
-    }
-};
+}
 
 class Enemy extends AbstractActor {
-    constructor(startingPosition, speed, direction) {
-        super(25, 25, startingPosition, speed)
-        this.movement = direction;
+
+    constructor(width, height, startingPosition, speed, direction) {
+        super(width, height, startingPosition, speed, direction);
+
         this.hitpoints = 1;
 
     }
@@ -410,7 +586,7 @@ class Enemy extends AbstractActor {
     update(gameState, boundaries) {
         this.move(boundaries);
         if (this.position[0] <= boundaries[0]+this.width || this.position[0] >= boundaries[2]-this.width) {
-            this.movement[0] *= -1;
+            this.direction[0] *= -1;
         }
         if (this.position[1] <= boundaries[1]+this.height || this.position[1] >= boundaries[3]-this.height ) {
             for (let i = 0; i < gameState.gameObjects.length; i++) {
@@ -431,49 +607,50 @@ class Enemy extends AbstractActor {
 }
 
 class Projectile extends AbstractActor {
-    constructor(startingPosition, speed, direction) {
+    constructor(startingPosition, speed, direction, target, colour) {
         super(5, 7, startingPosition, speed);
 
-        this.movement = direction;
-        // this.target = target;
+        this.direction = direction;
+        this.target = target;
+        this.colour = colour;
     }
 
     update (gameState, boundaries) {
 
         var shootingBoundaries = Object.assign({}, boundaries);
-
-        shootingBoundaries[0] -= this.width/5;
-        shootingBoundaries[1] -= this.height/5;
-
-        // shootingBoundaries[2] += this.width;
-        // shootingBoundaries[3] += this.height;
+        // This time did not work...
+        // shootingBoundaries[2] += this.width * gameState.scale ;
+        // shootingBoundaries[3] += this.height * .1 * gameState.scale;
 
         this.move(shootingBoundaries);
 
-        if ((this.position[0] <= shootingBoundaries[0] || this.position[0] >= shootingBoundaries[2]) 
-            || (this.position[1] <= shootingBoundaries[1] || this.position[0] >= shootingBoundaries[3]))
+        if (this.position[0] <= shootingBoundaries[0] ||
+            this.position[1] <= shootingBoundaries[1] ||
+            this.position[0] >= shootingBoundaries[2] ||
+            this.position[0] >= shootingBoundaries[3]) 
         {
             for (let i = 0; i < gameState.gameObjects.length; i++) {
                 var gameObject = gameState.gameObjects[i];
                 if (gameObject === this) {
                     gameState.gameObjects.splice(i, 1);
                 }
-                
             }
         }
-    
     }
 
     draw (gameWindow) {
-
-        
         gameWindow.context.beginPath();
-        gameWindow.context.ellipse(this.position[0], this.position[1], this.width/1.5 * gameWindow.scale, this.height * gameWindow.scale, 0, 0, 2 * Math.PI)
+        gameWindow.context.ellipse(
+            this.position[0], this.position[1],
+            this.width/1.5 * gameWindow.scale,
+            this.height * gameWindow.scale, 
+            0, 
+            0, 
+            2 * Math.PI
+        )
         gameWindow.context.closePath();
-        gameWindow.context.fillStyle = 'yellow';
+        gameWindow.context.fillStyle = this.colour;
         gameWindow.context.fill();
-        // gameWindow.context.fillRect(this.position[0], this.position[1],
-        //                 this.width * gameWindow.scale, this.height * gameWindow.scale);
     }
 };
 
