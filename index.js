@@ -126,7 +126,7 @@ class AbstractGameState {
     draw() {
         throw new Error("Method 'draw()' must be implemented.");
     }
-}
+};
 
 class GameState extends AbstractGameState {
     constructor(scale) {
@@ -259,7 +259,7 @@ class GameState extends AbstractGameState {
             gameArea[3]
         );
     }
-}
+};
 
 class GameUI {
 
@@ -572,7 +572,7 @@ class Player extends AbstractActor {
             context.fill();
         }
     }
-}
+};
 
 class Enemy extends AbstractActor {
 
@@ -604,7 +604,7 @@ class Enemy extends AbstractActor {
         gameWindow.context.fillRect(this.position[0], this.position[1],
                         this.width * gameWindow.scale, this.height * gameWindow.scale);
     }
-}
+};
 
 class Projectile extends AbstractActor {
     constructor(startingPosition, speed, direction, target, colour) {
