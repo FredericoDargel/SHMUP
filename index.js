@@ -155,8 +155,8 @@ class GameState extends AbstractGameState {
         this.player = new Player(playerWidth, playerHeight, startingPosition, 4 * scale, [0, 0]);
         this.enemy = new Enemy(playerWidth, playerHeight,  [startingPosition[0], calculatedArea[1] + playerHeight * this.scale], 1 * scale, [1, .25]);
         
-        this.gameObjects.push(this.player);
         this.gameObjects.push(this.enemy);
+        this.gameObjects.push(this.player);
     }
 
     update(inputHandler, gameWindow) {
@@ -294,7 +294,6 @@ class GameUI {
 
     update() {
         if (this.playerLives == 0) {/* exit this state */}
-
     }
 
     draw(gameWindow, scale) {
@@ -362,34 +361,12 @@ class GameUI {
             this.drawText(item, context, scale);
         });
 
-        context.beginPath();
-        context.arc(
-            gameWindow.resolution[0] * 0.83,
-            gameWindow.resolution[1] * 0.8,
-            70 * gameWindow.scale,
-            0,
-            2* Math.PI
-        );
-        context.closePath();
-        context.fillStyle = "red";
-        context.fill();
+        var circleCenter = [0.83, 0.78];
 
         context.beginPath();
         context.arc(
-            gameWindow.resolution[0] * 0.83,
-            gameWindow.resolution[1] * 0.8,
-            66 * gameWindow.scale,
-            0,
-            2* Math.PI
-        );
-        context.closePath();
-        context.fillStyle = "lightgrey";
-        context.fill();
-
-        context.beginPath();
-        context.arc(
-            gameWindow.resolution[0] * 0.83,
-            gameWindow.resolution[1] * 0.8,
+            gameWindow.resolution[0] * circleCenter[0],
+            gameWindow.resolution[1] * circleCenter[1],
             60 * gameWindow.scale,
             0,
             2* Math.PI
@@ -400,9 +377,33 @@ class GameUI {
 
         context.beginPath();
         context.arc(
-            gameWindow.resolution[0] * 0.83,
-            gameWindow.resolution[1] * 0.8,
-            54 * gameWindow.scale,
+            gameWindow.resolution[0] * circleCenter[0],
+            gameWindow.resolution[1] * circleCenter[1],
+            55 * gameWindow.scale,
+            0,
+            2* Math.PI
+        );
+        context.closePath();
+        context.fillStyle = "lightgrey";
+        context.fill();
+
+        context.beginPath();
+        context.arc(
+            gameWindow.resolution[0] * circleCenter[0],
+            gameWindow.resolution[1] * circleCenter[1],
+            50 * gameWindow.scale,
+            0,
+            2* Math.PI
+        );
+        context.closePath();
+        context.fillStyle = "red";
+        context.fill();
+
+        context.beginPath();
+        context.arc(
+            gameWindow.resolution[0] * circleCenter[0],
+            gameWindow.resolution[1] * circleCenter[1],
+            45 * gameWindow.scale,
             0,
             2* Math.PI
         );
@@ -654,4 +655,4 @@ class Projectile extends AbstractActor {
     }
 };
 
-let game = new Game();
+const game = new Game();
