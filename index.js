@@ -161,6 +161,7 @@ class GameState extends AbstractGameState {
 
     update(inputHandler, gameWindow) {
         if (this.gameObjects.length == 0) { return; }
+        this.detectCollisions();
         this.controlPlayer(inputHandler);
         this.gameObjects.forEach(gameObject => {
             gameObject.update(this, this.calculateGameArea());
@@ -178,6 +179,47 @@ class GameState extends AbstractGameState {
         ];
 
         return gameArea;
+    }
+
+    detectCollisions() {
+        let projectiles = [];
+        this.gameObjects.forEach(gameObject => {
+            if (gameObject instanceof Projectile) { projectiles.push(gameObject); }            
+        });
+        if (projectiles.length == 0) { return }
+        for (let i = 0; i < projectiles.length; i++) {
+            var projectile = projectiles[i];
+
+            for (let j = 0; j < this.gameObjects.length; j++) {
+                var actor = this.gameObjects[j];
+                if(actor instanceof Projectile || actor == projectile.owner) { continue; }
+                if(!(projectile.position[0] > actor.position[0] + actor.width * this.scale ||
+                    projectile.position[0] + projectile.width * this.scale < actor.position[0] ||
+                    projectile.position[1] > actor.position[1] + actor.height * this.scale ||
+                    projectile.position[1] + projectile.height * this.scale < actor.position[1]
+                ))
+                {
+                    if(!(actor instanceof Player)){
+                        this.gameObjects.splice(j, 1);
+                        j--;
+                    }
+                    else {
+                        this.gameUI.grazeCounter++;
+                        if(!(projectile.position[0] > actor.position[0] + actor.width * this.scale * .5||
+                            projectile.position[0] + projectile.width * this.scale < actor.position[0] ||
+                            projectile.position[1] > actor.position[1] + actor.height * this.scale * 65||
+                            projectile.position[1] + projectile.height * this.scale < actor.position[1]
+                        )) {
+                            this.gameObjects.splice(j, 1);
+                            j--;
+                            this.gameUI.playerLives--;
+                        }
+                    }
+                }
+                
+            }
+            
+        }
     }
 
     controlPlayer(input) {
@@ -263,7 +305,7 @@ class GameState extends AbstractGameState {
 
 class GameUI {
 
-    constructor(GameState /* difficulty */) {
+    constructor(GameState /*, difficulty */) {
 
         this.gameState = GameState;
 
@@ -538,7 +580,7 @@ class Player extends AbstractActor {
             this.position[1] - this.height * gameState.scale / 10
         ];
         
-        gameState.gameObjects.push(new Projectile(shootPosition, 10, [0, -1], undefined, 'yellow'))
+        gameState.gameObjects.push(new Projectile(shootPosition, 10, [0, -1], this, 'yellow'))
     }
 
     draw(gameWindow) {
@@ -580,7 +622,9 @@ class Enemy extends AbstractActor {
     constructor(width, height, startingPosition, speed, direction) {
         super(width, height, startingPosition, speed, direction);
 
-        this.hitpoints = 1;
+        // this.hitpoints = 1;
+        this.lastShot         = performance.now();
+        this.shootingCooldown = 1150 ;
 
     }
 
@@ -598,6 +642,14 @@ class Enemy extends AbstractActor {
                 
             }
         }
+        if (performance.now() - this.lastShot > this.shootingCooldown) {
+            this.lastShot = performance.now();
+            var shootPosition =  [
+                this.position[0] + this.width * gameState.scale / 2,
+                this.position[1] + this.height * gameState.scale / 10
+            ];
+            gameState.gameObjects.push(new Projectile(shootPosition, 1, [0, 1], this, 'red'))
+        }
     }
 
     draw(gameWindow) {
@@ -608,11 +660,11 @@ class Enemy extends AbstractActor {
 };
 
 class Projectile extends AbstractActor {
-    constructor(startingPosition, speed, direction, target, colour) {
+    constructor(startingPosition, speed, direction, owner, colour) {
         super(5, 7, startingPosition, speed);
 
         this.direction = direction;
-        this.target = target;
+        this.owner = owner;
         this.colour = colour;
     }
 
