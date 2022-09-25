@@ -378,7 +378,7 @@ class GameUI {
         menuItems.push(playerScore);
 
         var lives = "";
-        for (let index = 0; index < this.playerLives; index++) {lives += "*";}
+        for (let index = 0; index < this.playerLives; index++) {lives += "✦";}
 
         var playerLives = {
             text: "Lives: " + lives,
@@ -388,7 +388,7 @@ class GameUI {
         menuItems.push(playerLives);
 
         var bombs = "";
-        for (let index = 0; index < this.playerBombs; index++) {bombs += "*";}
+        for (let index = 0; index < this.playerBombs; index++) {bombs += "✦";}
         var playerBombs = {
             text: "Bombs: " + bombs,
             position: [gameWindow.resolution[0] / positionXOffset,
