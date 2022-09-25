@@ -183,43 +183,48 @@ class GameState extends AbstractGameState {
 
     detectCollisions() {
         let projectiles = [];
+        let actors = [];
         this.gameObjects.forEach(gameObject => {
-            if (gameObject instanceof Projectile) { projectiles.push(gameObject); }            
+            gameObject instanceof Projectile ? 
+                projectiles.push(gameObject) : actors.push(gameObject);
         });
-        if (projectiles.length == 0) { return }
-        for (let i = 0; i < projectiles.length; i++) {
-            var projectile = projectiles[i];
 
-            for (let j = 0; j < this.gameObjects.length; j++) {
-                var actor = this.gameObjects[j];
-                if(actor instanceof Projectile || actor == projectile.owner) { continue; }
-                if(!(projectile.position[0] > actor.position[0] + actor.width * this.scale ||
+        if (projectiles.length == 0 || actors.length == 0) { return; }
+
+        projectiles.forEach(projectile => {
+            actors.forEach(actor => {
+
+                if (!(projectile.position[0] > actor.position[0] + actor.width * this.scale ||
                     projectile.position[0] + projectile.width * this.scale < actor.position[0] ||
                     projectile.position[1] > actor.position[1] + actor.height * this.scale ||
                     projectile.position[1] + projectile.height * this.scale < actor.position[1]
-                ))
+                )) 
                 {
-                    if(!(actor instanceof Player)){
-                        this.gameObjects.splice(j, 1);
-                        j--;
+                    //TODO: enemies should take damage instead of die.
+                    if (!(actor instanceof Player) && !(actor instanceof projectile.owner)) {
+                        this.gameObjects.splice(this.gameObjects.indexOf(actor), 1);
+                        this.gameObjects.splice(this.gameObjects.indexOf(projectile), 1);
                     }
-                    else {
-                        this.gameUI.grazeCounter++;
-                        if(!(projectile.position[0] > actor.position[0] + actor.width * this.scale * .5||
-                            projectile.position[0] + projectile.width * this.scale < actor.position[0] ||
-                            projectile.position[1] > actor.position[1] + actor.height * this.scale * 65||
-                            projectile.position[1] + projectile.height * this.scale < actor.position[1]
-                        )) {
-                            this.gameObjects.splice(j, 1);
-                            j--;
+                    else if (actor instanceof Player) {
+                        // TODO: function to add Graze and score based on the graze.
+                        this.gameUI.graze();
+                        if (!(projectile.position[0] > actor.position[0] + (actor.hitbox[0] * this.scale) + (actor.hitbox[2] * this.scale)  ||
+                            projectile.position[0] + projectile.width * this.scale < actor.position[0] + (actor.hitbox[0] * this.scale) ||
+                            projectile.position[1] > actor.position[1] + (actor.hitbox[1] * this.scale) + (actor.hitbox[3] * this.scale) ||
+                            projectile.position[1] + projectile.height * this.scale < actor.position[1] + (actor.hitbox[1] * this.scale)
+                        )) 
+                        {
+                            // TODO: function for player death.
                             this.gameUI.playerLives--;
+                            actor.isBlinking = true;
+                            this.gameUI.playerLives > 0 ? 
+                                actor.position = Object.assign({}, actor.startingPosition) : this.gameObjects.splice(this.gameObjects.indexOf(actor), 1);
+                            this.gameObjects.splice(this.gameObjects.indexOf(projectile), 1);
                         }
                     }
                 }
-                
-            }
-            
-        }
+            });
+        });
     }
 
     controlPlayer(input) {
@@ -328,6 +333,19 @@ class GameUI {
         this.collectedScore = 0;
     }
 
+    addScore(value) {
+        this.playerScore += value;
+        if (this.playerScore > this.highScore) {
+            this.highScore = this.playerScore;
+        }
+
+    }
+
+    graze() {
+        this.grazeCounter++;
+        this.addScore(1 / 10)
+    }
+
     setValuesFromDifficulty( /* difficulty */) {
         /* TODO:
         * Set lives and bombs according to difficulty
@@ -346,14 +364,14 @@ class GameUI {
         var menuItems = [];
         
         var highScore = {
-            text: "HighScore: " + this.highScore,
+            text: "HighScore: " + this.highScore.toFixed(0),
             position: [gameWindow.resolution[0] / positionXOffset, 
                         (this.gameState.padding) * scale],
         };
         menuItems.push(highScore);
 
         var playerScore = {
-            text: "Score: " + this.playerScore,
+            text: "Score: " + this.playerScore.toFixed(0),
             position: [gameWindow.resolution[0] / positionXOffset, 
                          (this.fontSize * 3) * scale],
         };
@@ -546,12 +564,26 @@ class Player extends AbstractActor {
     constructor(width, height, startingPosition, speed, direction) {
         super(width, height, startingPosition, speed, direction);
 
+        this.startingPosition = Object.assign({}, startingPosition);
+        this.isBlinking         = false;
+        this.lastBlink          = performance.now();
+        this.blinkingCooldown   = 250;
+        this.blinkTime          = 1000;
+        this.blinkingTimer      = 0;
+
         this.standardSpeed  = speed;
         this.slowedSpeed    = speed * 0.5;
         this.isSlowed       = false;
         
         this.lastShot         = performance.now();
         this.shootingCooldown = 50 ;
+
+        this.hitbox = [
+            this.width/2.7,
+            this.height/2,
+            this.width * 0.3,
+            this.height * 0.3
+        ];
     }
 
     update(gameState, boundaries) {
@@ -580,13 +612,15 @@ class Player extends AbstractActor {
             this.position[1] - this.height * gameState.scale / 10
         ];
         
-        gameState.gameObjects.push(new Projectile(shootPosition, 10, [0, -1], this, 'yellow'))
+        gameState.gameObjects.push(new Projectile(shootPosition, 10, [0, -1], Player, 'yellow'))
     }
 
     draw(gameWindow) {
         // Less Verbose:
         var context = gameWindow.context;
         var scale = gameWindow.scale;
+
+        // TODO Blinking.
 
         // Drawing Triangles is hard:
         context.beginPath();
@@ -602,9 +636,22 @@ class Player extends AbstractActor {
 
         // Shows hitbox
         if (this.isSlowed) {
+            // Display as square:
+
+            // context.fillStyle = 'green';
+            // context.fillRect(
+            //     this.position[0] + this.width/2.7 * scale,
+            //     this.position[1] + this.height/2 * scale,
+            //     this.width * scale * 0.3,
+            //     this.height * scale * 0.3
+            // );
+            
+                
+            //Display as Circle:
+
             context.beginPath();
             context.arc(
-                this.position[0] + this.width * scale * .5, 
+                this.position[0] + (this.width * scale * .52), 
                 this.position[1] + (this.height * scale * .65), 
                 (this.width / 7) * scale, 
                 0, 
@@ -613,6 +660,7 @@ class Player extends AbstractActor {
             context.closePath();
             context.fillStyle = 'red';
             context.fill();
+                    
         }
     }
 };
@@ -624,7 +672,7 @@ class Enemy extends AbstractActor {
 
         // this.hitpoints = 1;
         this.lastShot         = performance.now();
-        this.shootingCooldown = 1150 ;
+        this.shootingCooldown = 1000 ;
 
     }
 
@@ -646,9 +694,9 @@ class Enemy extends AbstractActor {
             this.lastShot = performance.now();
             var shootPosition =  [
                 this.position[0] + this.width * gameState.scale / 2,
-                this.position[1] + this.height * gameState.scale / 10
+                this.position[1] + this.height * gameState.scale,
             ];
-            gameState.gameObjects.push(new Projectile(shootPosition, 1, [0, 1], this, 'red'))
+            gameState.gameObjects.push(new Projectile(shootPosition, .8, [0, 1], Enemy, 'red'))
         }
     }
 
